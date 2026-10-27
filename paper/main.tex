@@ -1,5 +1,6 @@
 %% IROS 2027 submission -- IEEE conference format (ieeeconf.cls from PaperCept).
 %% IROS allows 6 pages + 2 additional pages (references included in the limit).
+%% Deadline: 1 March 2027, 23:59 Pacific.
 \documentclass[letterpaper, 10 pt, conference]{ieeeconf}
 %\documentclass[a4paper, 10pt, conference]{ieeeconf}
 
@@ -23,6 +24,10 @@
 \usepackage{xcolor}
 \usepackage{cite}
 \usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage[hidelinks]{hyperref}
 
 % Draft notes -- set \drafttrue to \draftfalse to hide them.
@@ -37,17 +42,24 @@
 \fi
 
 \newcommand{\robocasa}{RoboCasa}
+\newcommand{\segmind}{SegMind}
+\newcommand{\eql}{EQL}
+\newcommand{\sdt}{SDT}
+\newcommand{\pr}{\mathrm{P}}
+\newcommand{\dop}{\mathrm{do}}
+\newcommand{\tbd}{\textcolor{red}{--}}
+
+\newtheorem{definition}{Definition}
 
 \title{\LARGE \bf
-\todo{Title} Representing RoboCasa Task Conditions as Random Events
+What Went Wrong and How to Fix It:\\
+Event-Grounded Causal Circuits for Explainable Robot Learning in Kitchens
 }
 
-\author{Author One$^{1}$ and Author Two$^{2}$%
-\thanks{$^{1}$Author One is with the Institute for Artificial Intelligence,
-        University of Bremen, Germany
-        {\tt\small author.one@uni-bremen.de}}%
-\thanks{$^{2}$Author Two is with \todo{affiliation}
-        {\tt\small author.two@example.org}}%
+\author{Sorin Arion$^{1}$, \todo{co-authors}, and Michael Beetz$^{1}$%
+\thanks{$^{1}$The authors are with the AICOR Institute for Artificial Intelligence,
+        University of Bremen, Bremen, Germany
+        {\tt\small \{sorin, beetz\}@uni-bremen.de}}%
 }
 
 \begin{document}
@@ -58,108 +70,571 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-\todo{Abstract (150--200 words).}
-Manipulation benchmarks such as \robocasa{} state what a task admits --- where an
-object may be placed, which region the gripper must leave, how far a fixture is open
---- implicitly, in the success checks and samplers of their implementation.
-We study how faithfully these conditions can be represented as events of a product
-algebra, and what such a representation costs.
-\todo{Key results.}
+Robots that learn from their own experience rarely say why an action failed or
+what they would change, and robots that explain their failures rarely improve
+from them. We present a system that does both on \robocasa{}'s household tasks.
+\segmind{} segments each episode into symbolic events over a semantic digital
+twin: contact, holding, lifting, placing, containment, opening. These events
+annotate the recorded episode and decide whether the task succeeded, using the
+same predicates as \robocasa{}'s own success checks. Interventional causal
+circuits are fitted to the robot's annotated runs. They are tractable
+probabilistic models that answer $\pr(\text{success} \mid \dop(\cdot))$ exactly.
+When \segmind{} detects a failure, it names the failed action and the moment it
+failed. The circuits then decide whether the cause was one of the robot's own
+action parameters or something in the scene, and return a corrective region or
+trigger a plan repair. Every decision comes with its explanation: the inference
+trace behind the detected event, and the interventional probabilities behind the
+blamed cause. Every run is stored in episodic memory in the twin's own classes
+and refits the circuits, so the robot learns from its own runs without
+demonstrations. We evaluate on the PR2, the Toyota HSR and the PAL TIAGo in
+\robocasa{} kitchens. \todo{Headline numbers: annotation accuracy against
+\robocasa{}'s success checks, recovery rate against blind resampling, attempts
+saved.}
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
 \label{sec:introduction}
 
-\todo{Motivation: task conditions in simulation benchmarks such as
-\robocasa{}~\cite{nasiriany2024robocasa} are code, not data.}
+A mobile manipulator that puts a mug into a microwave can fail in many ways. It
+may stand too far from the counter, grasp the mug too low, or let it slip in
+transport. A bowl next to the mug may also block the fingers. To recover, the
+robot needs three answers: \emph{what} went wrong, \emph{why} it went wrong, and
+\emph{what to change}. To improve, it must keep those answers and learn from
+them.
 
-\todo{Problem statement and research questions.}
+Learned policies trained on large demonstration datasets, the standard approach
+on benchmarks such as \robocasa{}~\cite{nasiriany2024robocasa}, give none of
+these answers explicitly. A failure is visible only in the final success flag.
+Failure-explanation systems based on large vision-language
+models~\cite{liu2023reflect,duan2024aha} describe failures in natural language.
+Their explanations, however, are not grounded in a model the robot acts on, and
+they do not say which parameter to change by how much. Causal approaches to
+robot failure~\cite{diehl2022why} identify causes from simulated interventions,
+but over a fixed set of variables and for a single action.
 
-\todo{Contributions:}
-\begin{itemize}
-  \item \todo{A survey of the success conditions stated by \robocasa{} tasks, classified
-        by the kind of set they describe (discrete, axis-aligned, curved, first order).}
-  \item \todo{A translation of these conditions into random events and a measure of
-        its cost (number of simple sets) and fidelity (intersection over union).}
-  \item \todo{An export of \robocasa{}'s admissible regions --- placement regions,
-        gripper exclusion zones, joint openness, device state --- into a semantic world
-        model.}
-\end{itemize}
+We argue that a robot needs two capabilities, built on one model of the world.
+\emph{Event understanding} turns the continuous stream of a run into the
+symbolic events the task is defined by. \emph{Causal reasoning} relates those
+events to the robot's choices and to the scene. We build on three of our own
+lines of work, each of which stops where the next one starts.
+\segmind{}~\cite{arion2026segmind} segments a run into explained events over a
+semantic digital twin (\sdt{})~\cite{kuempel2021sdt}, but only says \emph{what}
+happened. Interventional causal circuits~\cite{vasantakumaar2026icc} turn a
+failed action into the parameter that caused it and a corrective value. They
+need an external pass/fail tester and a fixed set of variables, and were shown
+on one pick-and-place. Relational causal circuits~\cite{anon2027relational} lift
+these circuits to scenes with a varying number of objects, so that a cause can
+be ``how crowded the target is'' or ``the neighbour on the fingers' closing
+axis''.
+
+\robocasa{} needs all three. Its success conditions are written in the
+predicates \segmind{} detects: an object inside a receptacle, in contact with a
+fixture, away from the gripper, or a door opened past a threshold. Its tasks
+are sequential, and its scenes are relational: \todo{87} of its task files place
+a varying number of distractor objects on counters, in cabinets, in the sink and
+in the fridge.
+
+\paragraph*{Contributions}
+\begin{enumerate}
+  \item \textbf{Event-based annotation and scoring of robot episodes.}
+        \segmind{} annotates recorded episodes with typed, explained events over
+        the \sdt{}. The same events decide task success, using the predicates of
+        \robocasa{}'s own success checks. They also act as the tester the causal
+        circuits learn from, and fill in what happened to every other object in
+        the scene.
+  \item \textbf{Learnable and explainable causal diagnosis at two levels.}
+        Flat causal circuits over each action type's parameters, and relational
+        causal circuits grounded for the objects actually around the target,
+        decide whether the robot's parameters or the scene caused a failure. A
+        parameter cause is answered with a one-shot correction, a scene cause
+        with a plan repair. Both are refitted from the robot's own runs.
+  \item \textbf{One object model from execution to causal query.} Success
+        predicates, expected action effects, episodic memory and causal queries
+        are all expressed in the Entity Query Language (\eql{})~\cite{bassiouny2026krrood}
+        over the twin's classes. No hand-built feature table is needed.
+  \item \textbf{An evaluation on three mobile manipulators}, the PR2, the HSR and
+        the TIAGo, on \robocasa{} tasks in \robocasa{}'s kitchens as built.
+        \todo{Task count; real-robot runs if any.}
+\end{enumerate}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
 \label{sec:related-work}
 
-\subsection{Simulation Benchmarks for Mobile Manipulation}
-\todo{\robocasa{}, RLBench, ManiSkill, BEHAVIOR, \dots}
+\paragraph*{Household manipulation benchmarks}
+\robocasa{}~\cite{nasiriany2024robocasa} builds on
+robosuite~\cite{zhu2020robosuite} and MuJoCo~\cite{todorov2012mujoco}. It
+provides procedurally composed kitchens, atomic and composite tasks, and large
+demonstration datasets for policy learning. Success is decided by hand-written
+checks inside each task class. We keep \robocasa{}'s kitchens and success
+thresholds, but replace the end-to-end policy with knowledge-based
+plans~\cite{beetz2010cram} whose continuous parameters are learned. We also
+make the success checks explicit and inspectable as \segmind{} events.
 
-\subsection{Representing Task Constraints}
-\todo{Symbolic task specifications, constraint-based manipulation, probabilistic
-representations of regions.}
+\paragraph*{Event segmentation and episode annotation}
+Event segmentation theory~\cite{zacks2007event,kurby2008segmentation} holds that
+people parse continuous activity into discrete events at points of significant
+change. In robotics, rule-based, learned and foundation-model-based segmenters
+annotate demonstrations and robot runs. Learned segmenters seldom expose the
+reasoning behind a boundary. \segmind{}~\cite{arion2026segmind} detects events
+with statecharts~\cite{stelter2025motionstatecharts} whose detectors are \eql{}
+rules over the \sdt{}, so every event carries an inference trace.
+
+\paragraph*{Failure explanation and recovery}
+REFLECT~\cite{liu2023reflect} summarises multisensory robot experience
+hierarchically and uses a language model to explain and correct failures.
+AHA~\cite{duan2024aha} fine-tunes a vision-language model to detect and reason
+about manipulation failures. Diehl and Ramirez-Amaro~\cite{diehl2022why} learn a
+causal Bayesian network from simulated interventions to explain failures in
+stacking. Our explanations are tied to the model the robot acts on. The events
+come from the twin, and the causes are variables of the robot's plan or of the
+scene, with an exact interventional probability for each.
+
+\paragraph*{Tractable causal inference}
+Probabilistic circuits~\cite{choi2020probabilistic} answer marginal and
+conditional queries in time linear in their size. Under marginal
+determinism~\cite{wang2023compositional}, they also answer backdoor-adjusted
+interventional queries exactly. Interventional causal
+circuits~\cite{vasantakumaar2026icc} learn such circuits as joint probability
+trees~\cite{nyga2023jpt} from successful robot runs and use them to diagnose and
+correct failed plans. Relational causal circuits~\cite{anon2027relational}
+ground a circuit learned over a class and its collections for the objects a
+query names, building on relational sum-product
+networks~\cite{nath2015relational}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Approach}
 \label{sec:approach}
 
-\subsection{Task Conditions as Queries}
-\todo{Stating a task's success condition in the Entity Query Language; predicate
-vocabulary per suite.}
+\begin{figure*}[t]
+  \centering
+  \begin{tikzpicture}[
+      node distance=4mm and 7.5mm,
+      box/.style={draw, rounded corners=2pt, align=center, font=\footnotesize,
+                  minimum height=10mm, text width=20.5mm, fill=white},
+      mem/.style={box, fill=black!6},
+      arr/.style={-{Stealth[length=2mm]}, thick},
+      lab/.style={font=\scriptsize\itshape, align=center}]
+    \node[box] (propose) {\textbf{Propose}\\parameters from\\JPT per action};
+    \node[box, right=of propose] (execute) {\textbf{Execute}\\CRAM plan in\\MuJoCo / robot};
+    \node[box, right=of execute] (segment) {\textbf{Segment}\\\segmind{} events\\over the \sdt{}};
+    \node[box, right=of segment] (localise) {\textbf{Localise}\\first missing or\\unexpected event};
+    \node[box, right=of localise] (diagnose) {\textbf{Diagnose}\\flat + relational\\causal circuits};
+    \node[box, right=of diagnose] (correct) {\textbf{Correct / repair}\\region or\\plan repair};
+    \node[mem, below=10mm of segment, text width=60mm] (memory)
+      {\textbf{Episodic memory} (ORM): attempts, parameters, neighbours,
+       annotated events, all as objects of the twin's classes};
+    \draw[arr] (propose) -- (execute);
+    \draw[arr] (execute) -- (segment);
+    \draw[arr] (segment) -- node[lab, above] {failure} (localise);
+    \draw[arr] (localise) -- (diagnose);
+    \draw[arr] (diagnose) -- (correct);
+    \draw[arr] (correct.north) -- ++(0,4mm) -| node[lab, above, pos=0.25] {retry with corrected parameters or repaired plan} (propose.north);
+    \draw[arr] (segment) -- node[lab, right] {annotate} (memory);
+    \draw[arr] (memory.west) -| node[lab, below, pos=0.25] {refit (learn)} (propose.south);
+    \draw[arr] (memory.east) -| node[lab, below, pos=0.25] {fit / ground} (diagnose.south);
+  \end{tikzpicture}
+  \caption{The loop. A CRAM plan proposes each action's parameters from learned
+  joint probability trees and executes them. \segmind{} annotates the run with
+  events over the semantic digital twin and scores it against \robocasa{}'s
+  success predicates. On failure, the first missing or unexpected event
+  localises the failed action. Flat and relational causal circuits then decide
+  whether the robot's parameters or the scene caused it, and the plan is
+  corrected or repaired. Every run, annotated, goes into episodic memory and
+  refits the models.}
+  \label{fig:overview}
+\end{figure*}
 
-\subsection{From Conditions to Random Events}
-\todo{Logical skeleton as boolean variables; DNF size as representation cost;
-first-order conditions are refused rather than instantiated.}
+Fig.~\ref{fig:overview} shows the loop; Alg.~\ref{alg:loop} states it. We first
+describe the shared world model (Sec.~\ref{sec:sdt}), then event-based
+annotation (Sec.~\ref{sec:segmind}), the causal circuits
+(Sec.~\ref{sec:circuits}), and how they are combined for diagnosis, correction
+and learning (Sec.~\ref{sec:loop}).
 
-\subsection{Admissible Regions in the Semantic World}
-\todo{Placement regions and gripper exclusion zones as Regions (Box, Sphere);
-joint openness and device state as intervals and values.}
+\subsection{One Object Model: Twin, Tasks and Memory}
+\label{sec:sdt}
+
+The semantic digital twin represents the scene as a world
+$W = (O, G, R)$~\cite{kuempel2021sdt}. $O$ is a set of bodies, $G$ assigns each
+body a geometry and a 6-DoF pose, and $R$ is a kinematic graph whose
+connections carry joint states. Bodies carry semantic annotations such as
+\texttt{Drawer}, \texttt{Fridge}, \texttt{Handle} and \texttt{CounterTop}. We
+load \robocasa{} kitchens into the twin directly from \robocasa{}'s MJCF and
+fixture metadata, so robot, kitchen and task objects share one model.
+\todo{Loader details: layouts/styles, mass and joint-limit fixes.}
+
+All knowledge is written in \eql{}~\cite{bassiouny2026krrood}, a query language
+embedded in Python that ranges over the twin's classes directly. \robocasa{}'s
+success checks, written as Python in each task's \texttt{\_check\_success}, are
+restated as \eql{} conditions over \segmind{}'s predicates. For example, the
+condition of \texttt{PickPlaceCounterToSink} is that the object is contained in
+the sink basin and no longer in contact with the gripper. Episodic memory stores
+every run through an object-relational mapping of the same classes: the action,
+its parameters, the target, the target's neighbours and the events. A
+relational circuit can therefore be fitted on memory without flattening it into
+a table.
+
+\subsection{\segmind{}: Event-Based Annotation of Episodes}
+\label{sec:segmind}
+
+\segmind{}~\cite{arion2026segmind} consumes a stream of twin states, either live
+during execution or replayed from a recorded episode. It emits a log of typed
+events, each with a start and end time, the objects involved, and the \eql{}
+inference trace that produced it. Detectors are organised as event detector
+statecharts~\cite{stelter2025motionstatecharts}. A detector becomes active when
+its start condition, a formula over other detectors' states, holds, so the
+detection of composite events needs no hand-written control flow. There are
+three levels:
+\begin{itemize}
+  \item \emph{atomic} events: contact and loss of contact, start and stop of
+        translation and rotation;
+  \item \emph{spatial-relation} events: support, containment and their loss,
+        and the opening and closing of articulated fixtures;
+  \item \emph{coarse} events composed of these: pick-up (translation plus loss
+        of support), placing (stop of motion plus support), insertion.
+\end{itemize}
+
+\paragraph*{Annotating episodes}
+Applied to a recorded episode, the event log is a temporal annotation of that
+episode. It contains which object was picked up when, where it was placed, which
+door was opened, and which other objects were touched or moved on the way.
+Because detection runs on the twin and not on pixels, the same detectors
+annotate any robot and any episode source: our own PR2, HSR and TIAGo runs, and
+\todo{\robocasa{}'s demonstration datasets, replayed into the twin}.
+
+\paragraph*{Expected effects and success}
+Each action type declares the events it is expected to cause.
+\texttt{PickUpAction} expects holding and lifting of its object;
+\texttt{PlaceAction} expects a placing on its target; \texttt{OpenAction}
+expects the fixture's opening past a threshold. A task succeeds when its \eql{}
+success condition holds over the annotated events at \robocasa{}'s own
+thresholds. Thus one definition of success scores the benchmark, rejects a run
+and serves as the effect variable of the causal model. A score, a rejection and
+a diagnosis can never disagree about what success meant.
+
+\subsection{Interventional Causal Circuits}
+\label{sec:circuits}
+
+\paragraph*{Flat circuits over action parameters}
+For each action type $a$ (pick up, place, open, close, \dots) we fit a joint
+probability tree~\cite{nyga2023jpt}, a probabilistic circuit, over the action's
+continuous parameters $X^a = (X_1, \dots, X_n)$ and the outcome variables $E$. For a pick-up, the parameters are the
+standing pose, approach direction, grasp height and arm. The outcomes are
+\segmind{}'s events, e.g.\ whether holding and lifting were detected. The
+circuit is structured by a marginal determinism tree derived from the causal
+graph: every sum unit at a level is support-deterministic over that level's
+query variables, i.e.\ its children's supports over those variables are
+disjoint~\cite{wang2023compositional}. We verify this property on every fitted
+circuit before querying it. Under it, the backdoor adjustment
+\begin{equation}
+  \pr(E \mid \dop(X_i = x)) = \sum_{z} \pr(E \mid X_i = x, Z = z)\,\pr(Z = z)
+  \label{eq:backdoor}
+\end{equation}
+for an adjustment set $Z$~\cite{pearl2009causality} is computed exactly, in time polynomial in the
+circuit's size. The result is itself a circuit over $(X_i, E)$. For randomised
+training runs $Z = \emptyset$ and \eqref{eq:backdoor} reduces to conditioning.
+For deployment data where scene state confounds parameter choice, $Z$ contains
+that scene state.
+
+\paragraph*{Relational circuits over the scene}
+A flat circuit can only blame the robot's own parameters. However, a correction
+to those parameters cannot help when a bowl stands in the way. We therefore
+also fit a relational causal circuit~\cite{anon2027relational} over the attempt
+class and its collection of neighbours. Each neighbour has its side of the
+fingers' closing axis, a distance band, and whether \segmind{} saw it moved or
+touched. The circuit is learned once over the class. For a given failed
+attempt, it is grounded for exactly the neighbours present. A scene cause can
+then be an aggregate (``the number of objects within 10\,cm of the target'') or
+one part (``the neighbour on the closing axis''). The circuit keeps the guarantees
+\eqref{eq:backdoor} needs.
+
+\paragraph*{Valid adjustment from the timeline}
+Backdoor adjustment must not adjust for a descendant of the cause. \segmind{}'s
+timestamps make the split explicit. Scene state recorded before an action starts
+cannot be a descendant of that action's parameters and is admissible in $Z$.
+Anything after the action starts is not.
+
+\subsection{Diagnosis, Correction and Learning}
+\label{sec:loop}
+
+\begin{algorithm}[t]
+  \caption{Event-grounded causal recovery}
+  \label{alg:loop}
+  \small
+  \begin{algorithmic}[1]
+    \Require task $\tau$, plan $\pi_\tau$, circuits $\{\mathcal{C}_a\}$, relational circuit $\mathcal{R}$, memory $\mathcal{M}$
+    \Loop
+      \State $\theta \sim \mathcal{C}_a(\cdot \mid E = \text{success})$ for each action $a \in \pi_\tau$ \Comment{propose}
+      \State $\xi \gets \textsc{Execute}(\pi_\tau, \theta)$
+      \State $\mathcal{E} \gets \textsc{SegMind}(\xi)$ \Comment{annotate}
+      \State $\mathcal{M} \gets \mathcal{M} \cup \{(\theta, \xi, \mathcal{E})\}$
+      \If{$\textsc{Success}_\tau(\mathcal{E})$} \Return success \EndIf
+      \State $(a, t) \gets$ first missing or unexpected event in $\mathcal{E}$ \Comment{localise}
+      \State $(i^\ast, q_{i^\ast}, \rho) \gets \textsc{Diagnose}(\mathcal{C}_a, \theta_a)$
+      \State $(s^\ast, q_{s^\ast}) \gets \textsc{Diagnose}(\mathcal{R}.\textsc{ground}(\text{scene at } t))$
+      \If{$q_{s^\ast} < q_{i^\ast}$} $\pi_\tau \gets \textsc{Repair}(\pi_\tau, s^\ast)$
+      \Else{} $\theta_{a,i^\ast} \gets$ midpoint of $\rho$ \EndIf
+      \State refit $\mathcal{C}_a$, $\mathcal{R}$ on $\mathcal{M}$ \Comment{learn}
+    \EndLoop
+  \end{algorithmic}
+\end{algorithm}
+
+\paragraph*{Localise}
+The first expected event that is missing, or the first unexpected one, names
+the failed action $a$ and the time $t$ of failure. Examples are a pick-up
+without lifting, or a loss of holding before the placing. The event's \eql{}
+inference trace states which rule fired with which bindings.
+
+\paragraph*{Diagnose}
+For each parameter $X_i$ of $a$ with observed value $x_i$, we query the
+interventional circuit of $X_i$ on the effect at a small interval around $x_i$:
+\begin{equation}
+  q_i = \pr\big(X_i \in [x_i - \epsilon, x_i + \epsilon]\big)
+  \text{ in } \pr(X_i, E \mid \dop(X_i)).
+  \label{eq:diagnosis}
+\end{equation}
+Here $q_i = 0$ means that $x_i$ lies outside the support of successful
+training runs. The primary cause is $i^\ast = \arg\min_i q_i$. The recommended
+region $\rho$ is the support region of $X_{i^\ast}$ with the highest
+interventional probability. The relational circuit is queried in the same way
+for the scene variables, grounded at the scene before $t$. Values outside the
+training support are flagged rather than corrected.
+
+\paragraph*{Correct or repair}
+A parameter cause gets a one-shot correction: $X_{i^\ast}$ is set inside
+$\rho$, and the action is retried. A scene cause gets a plan repair from CRAM:
+set the offending neighbour aside, approach from the other side, or use the
+other arm.
+
+\paragraph*{Explain}
+The explanation of a failure is the pair of the event trace (\emph{what} failed,
+\emph{when}, and by which rule) and the causal report (\emph{which} variable,
+its observed value, $q_i$ for every candidate, and the recommended region).
+Both are produced by the models the robot acts on, not generated after the
+fact. \todo{Fig.: an example explanation from a real run.}
+
+\paragraph*{Learn}
+Every run, successful or not, is stored annotated in episodic memory. Successful
+action instances refit the per-action JPTs that the plan samples from, and all
+instances refit the circuits. Circuits are fitted per action type, not per
+task. Relational circuits are grounded per scene. A handful of models therefore
+covers every \robocasa{} task built from these actions, whatever objects stand
+around. The robot learns without demonstrations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Experiments}
 \label{sec:experiments}
 
-\subsection{Setup}
-\todo{\robocasa{} version, task set, kitchen layouts/styles, hardware.}
+We evaluate four questions.
+\textbf{Q1}: Does \segmind{} understand the scene and the task well enough to
+annotate episodes and score them like \robocasa{} does?
+\textbf{Q2}: Do the causal circuits find the cause of a failure and fix it in
+fewer attempts than uninformed retries?
+\textbf{Q3}: Do relational circuits separate scene causes from parameter causes?
+\textbf{Q4}: Does the robot improve from its own runs, and do the explanations
+stay correct as it learns?
 
-\subsection{Kinds of Sets in Task Conditions}
-\todo{Table~\ref{tab:set-kinds}: per kind of set, count, share, first-order count,
-mean number of simple sets, mean IoU.}
+\subsection{Setup}
+\label{sec:setup}
+
+\paragraph*{Robots}
+We use three mobile manipulators with different kinematics and grippers: the
+PR2 (two 7-DoF arms, parallel grippers), the Toyota HSR (one 5-DoF arm on an
+omnidirectional base with a telescopic torso), and the PAL TIAGo (one 7-DoF arm,
+lifting torso). All three run the same CRAM plans. Motions are generated by
+\todo{Giskard} and base placement by graphs of convex
+sets~\cite{marcucci2023gcs}. \todo{TIAGo gripper variant.}
+
+\paragraph*{Environment and tasks}
+All runs are in MuJoCo in \robocasa{}'s kitchens as built (0.92\,m counters),
+loaded into the twin. Lowering a kitchen so that a robot can reach changes the
+benchmark; such runs are reported separately as a labelled variant. We use
+\robocasa{} atomic tasks from the pick-and-place, drawer and door families,
+listed in Table~\ref{tab:tasks}, \todo{and composite tasks}. Perception is
+\todo{known state / simulated visibility / RoboKudo~\cite{mania2024robokudo} on
+rendered images}.
+
+\paragraph*{Data}
+\todo{Number of episodes per robot and task; random parameter sampling for
+training; fault injection (pose noise, object mass, friction, stiff joints) for
+the test set; layouts and styles held out.}
 
 \begin{table}[t]
   \centering
-  \caption{Kinds of set in \robocasa{} task conditions \todo{fill in}.}
-  \label{tab:set-kinds}
-  \begin{tabular}{lrrrrr}
+  \caption{\robocasa{} tasks per robot in \robocasa{}'s kitchens as built:
+  success rate over \todo{$N$} episodes, as scored by \segmind{}
+  \todo{fill in}.}
+  \label{tab:tasks}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llccc}
     \toprule
-    Kind & \# & \% & First order & Simple sets & IoU \\
+    Family & Task & PR2 & HSR & TIAGo \\
     \midrule
-    Discrete      & -- & -- & -- & -- & -- \\
-    Axis-aligned  & -- & -- & -- & -- & -- \\
-    Curved        & -- & -- & -- & -- & -- \\
+    \multirow{2}{*}{Pick \& place}
+      & PickPlaceCounterToSink    & \tbd & \tbd & \tbd \\
+      & PickPlaceCounterToCabinet & \tbd & \tbd & \tbd \\
+    \midrule
+    \multirow{2}{*}{Drawer}
+      & OpenDrawer  & \tbd & \tbd & \tbd \\
+      & CloseDrawer & \tbd & \tbd & \tbd \\
+    \midrule
+    \multirow{3}{*}{Door}
+      & OpenMicrowave  & \tbd & \tbd & \tbd \\
+      & CloseMicrowave & \tbd & \tbd & \tbd \\
+      & CloseOven      & \tbd & \tbd & \tbd \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{Fidelity of Placement Regions}
-\todo{IoU of oriented placement rectangles against their axis-aligned bounding box.}
+\subsection{Q1: Scene and Task Understanding with \segmind{}}
+\label{sec:exp-segmind}
 
-\subsection{Approximating Curved Regions}
-\todo{Fidelity vs.\ number of boxes for gripper exclusion spheres/discs
-(single box: $\pi/6$ in 3D, $\pi/4$ in the plane).}
+\paragraph*{Protocol}
+We replay every recorded episode into \segmind{} and compare its annotations
+against two references. The first is \robocasa{}'s own \texttt{\_check\_success}
+evaluated in the same simulation, which measures agreement on task success. The
+second is event ground truth from the simulator's contact and joint states, which
+gives precision, recall and temporal error of event boundaries. \todo{Also
+annotate \robocasa{}'s demonstration datasets.}
 
-\subsection{Scalability}
-\todo{Cost of event operations as the number of conditions grows.}
+\paragraph*{Results}
+\todo{Table~\ref{tab:segmind}; discuss disagreements, especially the placing
+pairing and race conditions fixed for this paper.}
+
+\begin{table}[t]
+  \centering
+  \caption{Episode annotation by \segmind{}: agreement with \robocasa{}'s
+  success checks, and event detection against simulator ground truth
+  \todo{fill in}.}
+  \label{tab:segmind}
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabular}{lccccc}
+    \toprule
+    Robot & Episodes & Success agr. & Event P & Event R & $\Delta t$ [s] \\
+    \midrule
+    PR2   & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    HSR   & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    TIAGo & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Q2: Diagnosing and Correcting Parameter Failures}
+\label{sec:exp-recovery}
+
+\paragraph*{Protocol}
+We inject parameter faults into otherwise successful plans and compare three
+recovery strategies, each allowed up to \todo{$k$} attempts.
+\textbf{Blind resampling} draws new parameters from the JPT, the baseline of
+\cite{vasantakumaar2026icc}. \textbf{Circuit + final state} is the flat causal
+circuit with a final-state tester (object height only), as
+in~\cite{vasantakumaar2026icc}. \textbf{Circuit + \segmind{}} is our system.
+We report whether the injected parameter is named as the primary cause, the
+recovery rate, and the mean number of attempts. \todo{Replanning from scratch
+as a further baseline.}
+
+\paragraph*{Results}
+\todo{Table~\ref{tab:recovery}.}
+
+\begin{table}[t]
+  \centering
+  \caption{Recovery from injected parameter faults, averaged over tasks
+  \todo{fill in}. Cause: injected parameter named as primary cause.}
+  \label{tab:recovery}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{llccc}
+    \toprule
+    Robot & Method & Cause [\%] & Recovered [\%] & Attempts \\
+    \midrule
+    \multirow{3}{*}{PR2}
+      & Blind resampling         & --   & \tbd & \tbd \\
+      & Circuit + final state    & \tbd & \tbd & \tbd \\
+      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+    \midrule
+    \multirow{3}{*}{HSR}
+      & Blind resampling         & --   & \tbd & \tbd \\
+      & Circuit + final state    & \tbd & \tbd & \tbd \\
+      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+    \midrule
+    \multirow{3}{*}{TIAGo}
+      & Blind resampling         & --   & \tbd & \tbd \\
+      & Circuit + final state    & \tbd & \tbd & \tbd \\
+      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Q3: Robot or Scene?}
+\label{sec:exp-relational}
+
+\paragraph*{Protocol}
+We populate \robocasa{} counters with $0$ to \todo{$N$} distractors around the
+target, which produces failures with scene causes (blocked fingers, disturbed
+neighbours). We compare a flat circuit on a hand-flattened table (counts only,
+or one block of columns per neighbour) against the grounded relational circuit,
+on the same runs. We measure whether the cause is attributed correctly to the
+parameters or to the scene. We also compare the success of plan repair against
+parameter correction. \todo{Deep-set g-computation as in~\cite{anon2027relational}.}
+
+\paragraph*{Results}
+\todo{Confusion matrix of attributed cause type; recovery per distractor count.}
+
+\subsection{Q4: Learning and Explainability}
+\label{sec:exp-learning}
+
+\paragraph*{Protocol}
+Starting from \todo{$n_0$} random-parameter runs, the robot runs tasks
+repeatedly, storing every annotated run and refitting the models after every
+\todo{$m$} episodes. We report task success and the accuracy of cause
+attribution against the number of episodes in memory. For explainability, we
+check that each explanation is \emph{faithful}: applying the recommended
+correction to the failed run's parameters, and nothing else, makes the run
+succeed in \todo{X}\% of cases. \todo{A user study, or a check of explanations
+against injected causes.}
+
+\paragraph*{Results}
+\todo{Learning curves per robot (one figure, three panels).}
+
+\subsection{Composite Tasks}
+\label{sec:exp-composite}
+\todo{Recovery inside composite tasks: failures per step; fixing the failed
+step against restarting the task.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Discussion}
+\section{Discussion and Limitations}
 \label{sec:discussion}
-\todo{Limitations: first-order conditions, curved regions, dependence on \robocasa{}
-internals.}
+
+\emph{Interventions are one cause at a time.} The circuits intervene on one
+discrete or interval-valued cause at a time. Relations between neighbours enter
+only through their attributes and counts. Joint causes, such as a grasp height
+that fails only with a given approach, are not yet diagnosed.
+
+\emph{Out-of-support values are flagged, not fixed.} A failure whose parameters
+lie outside every training run gets $q_i = 0$ for every variable. The robot
+reports this case rather than guessing.
+
+\emph{The twin can be wrong.} \segmind{} reasons over the twin. With imperfect
+perception, a misdetected object pose propagates into the events. We treat the
+perceived pose as an observed variable, so misperception can show up as a cause.
+\todo{Quantify with perception levels.}
+
+\emph{Reach.} The HSR cannot reach \robocasa{}'s wall cabinets or the inside of
+some drawers at 0.92\,m counters. We report these tasks as blocked rather than
+change the kitchen.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 \label{sec:conclusion}
-\todo{Conclusion and future work.}
+
+We connected event-based annotation of robot episodes with interventional
+causal circuits. On \robocasa{}'s tasks, a PR2, an HSR and a TIAGo detect their
+failures, localise them to an action and a moment, decide whether their own
+parameters or the scene caused them, and correct or repair the plan. Each step
+is explained by the models the robot acts on, and the robot learns from its own
+runs without demonstrations. \todo{Summary of results.} Future work covers
+joint causes, real-robot runs in the lab kitchen, and annotating large
+demonstration datasets to fit circuits for learned policies.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgment}
