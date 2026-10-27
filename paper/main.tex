@@ -1,0 +1,174 @@
+%% IROS 2027 submission -- IEEE conference format (ieeeconf.cls from PaperCept).
+%% IROS allows 6 pages + 2 additional pages (references included in the limit).
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}
+%\documentclass[a4paper, 10pt, conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts % needed for \thanks
+\overrideIEEEmargins          % needed to meet printer requirements
+
+% Fixes "Error 1010/1000" in PaperCept's PDF check for some pdflatex builds.
+\pdfobjcompresslevel=0
+\pdfminorversion=4
+
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% Draft notes -- set \drafttrue to \draftfalse to hide them.
+\newif\ifdraft
+\drafttrue
+\ifdraft
+  \newcommand{\todo}[1]{{\color{red}[TODO: #1]}}
+  \newcommand{\note}[2]{{\color{blue}[#1: #2]}}
+\else
+  \newcommand{\todo}[1]{}
+  \newcommand{\note}[2]{}
+\fi
+
+\newcommand{\robocasa}{RoboCasa}
+
+\title{\LARGE \bf
+\todo{Title} Representing RoboCasa Task Conditions as Random Events
+}
+
+\author{Author One$^{1}$ and Author Two$^{2}$%
+\thanks{$^{1}$Author One is with the Institute for Artificial Intelligence,
+        University of Bremen, Germany
+        {\tt\small author.one@uni-bremen.de}}%
+\thanks{$^{2}$Author Two is with \todo{affiliation}
+        {\tt\small author.two@example.org}}%
+}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+\todo{Abstract (150--200 words).}
+Manipulation benchmarks such as \robocasa{} state what a task admits --- where an
+object may be placed, which region the gripper must leave, how far a fixture is open
+--- implicitly, in the success checks and samplers of their implementation.
+We study how faithfully these conditions can be represented as events of a product
+algebra, and what such a representation costs.
+\todo{Key results.}
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\label{sec:introduction}
+
+\todo{Motivation: task conditions in simulation benchmarks such as
+\robocasa{}~\cite{nasiriany2024robocasa} are code, not data.}
+
+\todo{Problem statement and research questions.}
+
+\todo{Contributions:}
+\begin{itemize}
+  \item \todo{A survey of the success conditions stated by \robocasa{} tasks, classified
+        by the kind of set they describe (discrete, axis-aligned, curved, first order).}
+  \item \todo{A translation of these conditions into random events and a measure of
+        its cost (number of simple sets) and fidelity (intersection over union).}
+  \item \todo{An export of \robocasa{}'s admissible regions --- placement regions,
+        gripper exclusion zones, joint openness, device state --- into a semantic world
+        model.}
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work}
+\label{sec:related-work}
+
+\subsection{Simulation Benchmarks for Mobile Manipulation}
+\todo{\robocasa{}, RLBench, ManiSkill, BEHAVIOR, \dots}
+
+\subsection{Representing Task Constraints}
+\todo{Symbolic task specifications, constraint-based manipulation, probabilistic
+representations of regions.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Approach}
+\label{sec:approach}
+
+\subsection{Task Conditions as Queries}
+\todo{Stating a task's success condition in the Entity Query Language; predicate
+vocabulary per suite.}
+
+\subsection{From Conditions to Random Events}
+\todo{Logical skeleton as boolean variables; DNF size as representation cost;
+first-order conditions are refused rather than instantiated.}
+
+\subsection{Admissible Regions in the Semantic World}
+\todo{Placement regions and gripper exclusion zones as Regions (Box, Sphere);
+joint openness and device state as intervals and values.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Setup}
+\todo{\robocasa{} version, task set, kitchen layouts/styles, hardware.}
+
+\subsection{Kinds of Sets in Task Conditions}
+\todo{Table~\ref{tab:set-kinds}: per kind of set, count, share, first-order count,
+mean number of simple sets, mean IoU.}
+
+\begin{table}[t]
+  \centering
+  \caption{Kinds of set in \robocasa{} task conditions \todo{fill in}.}
+  \label{tab:set-kinds}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Kind & \# & \% & First order & Simple sets & IoU \\
+    \midrule
+    Discrete      & -- & -- & -- & -- & -- \\
+    Axis-aligned  & -- & -- & -- & -- & -- \\
+    Curved        & -- & -- & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Fidelity of Placement Regions}
+\todo{IoU of oriented placement rectangles against their axis-aligned bounding box.}
+
+\subsection{Approximating Curved Regions}
+\todo{Fidelity vs.\ number of boxes for gripper exclusion spheres/discs
+(single box: $\pi/6$ in 3D, $\pi/4$ in the plane).}
+
+\subsection{Scalability}
+\todo{Cost of event operations as the number of conditions grows.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Discussion}
+\label{sec:discussion}
+\todo{Limitations: first-order conditions, curved regions, dependence on \robocasa{}
+internals.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+\todo{Conclusion and future work.}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Acknowledgment}
+\todo{Funding.}
+
+% Balance the columns on the last page if needed:
+%\addtolength{\textheight}{-3cm}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

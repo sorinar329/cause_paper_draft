@@ -1,0 +1,33 @@
+## Compiled paper output (built by CI, not committed)
+paper/main.pdf
+paper/paper.pdf
+site/
+
+## LaTeX auxiliary files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.synctex(busy)
+*.toc
+*.run.xml
+*.bcf
+*-blx.bib
+*.nav
+*.snm
+*.vrb
+*.xdv
+*.dvi
+
+## Editors
+*.bak
+*.swp
+*~
+.vscode/
+.idea/
