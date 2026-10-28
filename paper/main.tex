@@ -73,16 +73,17 @@ Event-Grounded Causal Circuits for Explainable Robot Learning in Kitchens
 Robots that learn from their own experience rarely say why an action failed or
 what they would change, and robots that explain their failures rarely improve
 from them. We present a system that does both on \robocasa{}'s household tasks.
-\segmind{} segments each episode into symbolic events over a semantic digital
-twin: contact, holding, lifting, placing, containment, opening. These events
-annotate the recorded episode and decide whether the task succeeded, using the
-same predicates as \robocasa{}'s own success checks. Interventional causal
-circuits are fitted to the robot's annotated runs. They are tractable
-probabilistic models that answer $\pr(\text{success} \mid \dop(\cdot))$ exactly.
-When \segmind{} detects a failure, it names the failed action and the moment it
-failed. The circuits then decide whether the cause was one of the robot's own
-action parameters or something in the scene, and return a corrective region or
-trigger a plan repair. Every decision comes with its explanation: the inference
+We use \segmind{}, an event detection framework, to segment each episode into
+symbolic events over a semantic digital twin: contact, holding, lifting,
+placing, containment, opening. \segmind{} annotates the recorded episode with
+these events and decides whether the task succeeded, using the same predicates
+as \robocasa{}'s own success checks. Interventional causal circuits are fitted
+to the robot's annotated runs. They are tractable probabilistic models that
+answer $\pr(\text{success} \mid \dop(\cdot))$ exactly. When \segmind{} detects a
+failure, it names the failed action and the moment it failed. The circuits then
+decide whether the cause was one of the robot's own action parameters or
+something in the scene. For a parameter cause they propose corrective
+parameters, and for a scene cause they trigger a plan repair. Every decision comes with its explanation: the inference
 trace behind the detected event, and the interventional probabilities behind the
 blamed cause. Every run is stored in episodic memory in the twin's own classes
 and refits the circuits, so the robot learns from its own runs without
@@ -96,7 +97,7 @@ saved.}
 \section{Introduction}
 \label{sec:introduction}
 
-A mobile manipulator that puts a mug into a microwave can fail in many ways. It
+A robot that puts a mug into a microwave can fail in many ways. It
 may stand too far from the counter, grasp the mug too low, or let it slip in
 transport. A bowl next to the mug may also block the fingers. To recover, the
 robot needs three answers: \emph{what} went wrong, \emph{why} it went wrong, and
@@ -113,11 +114,12 @@ they do not say which parameter to change by how much. Causal approaches to
 robot failure~\cite{diehl2022why} identify causes from simulated interventions,
 but over a fixed set of variables and for a single action.
 
-We argue that a robot needs two capabilities, built on one model of the world.
-\emph{Event understanding} turns the continuous stream of a run into the
-symbolic events the task is defined by. \emph{Causal reasoning} relates those
-events to the robot's choices and to the scene. We build on three of our own
-lines of work, each of which stops where the next one starts.
+We argue that a robot needs two capabilities that share one model of the world.
+The first is \emph{event understanding}, which turns what happened during a run
+into the symbolic events that define the task, and the second is \emph{causal
+reasoning}, which links those events to the robot's own choices and to the
+objects in the scene. We build on three of our earlier works. Each of them
+solves one part of this problem, but none of them solves it alone.
 \segmind{}~\cite{arion2026segmind} segments a run into explained events over a
 semantic digital twin (\sdt{})~\cite{kuempel2021sdt}, but only says \emph{what}
 happened. Interventional causal circuits~\cite{vasantakumaar2026icc} turn a
@@ -128,9 +130,9 @@ these circuits to scenes with a varying number of objects, so that a cause can
 be ``how crowded the target is'' or ``the neighbour on the fingers' closing
 axis''.
 
-\robocasa{} needs all three. Its success conditions are written in the
-predicates \segmind{} detects: an object inside a receptacle, in contact with a
-fixture, away from the gripper, or a door opened past a threshold. Its tasks
+\robocasa{} needs all three. Its success checks are written in terms of the same
+relations that \segmind{} detects, for example whether an object lies inside a
+receptacle or whether a door has been opened far enough. Its tasks
 are sequential, and its scenes are relational: \todo{87} of its task files place
 a varying number of distractor objects on counters, in cabinets, in the sink and
 in the fridge.
@@ -153,10 +155,11 @@ in the fridge.
         predicates, expected action effects, episodic memory and causal queries
         are all expressed in the Entity Query Language (\eql{})~\cite{bassiouny2026krrood}
         over the twin's classes. No hand-built feature table is needed.
-  \item \textbf{An evaluation on three mobile manipulators}, the PR2, the HSR and
-        the TIAGo, on \robocasa{} tasks in \robocasa{}'s kitchens as built.
-        \todo{Task count; real-robot runs if any.}
 \end{enumerate}
+
+We evaluate the system on three mobile manipulators, the PR2, the Toyota HSR
+and the PAL TIAGo, on \robocasa{} tasks in \robocasa{}'s kitchens as built.
+\todo{Task count; real-robot runs if any.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
@@ -216,7 +219,7 @@ networks~\cite{nath2015relational}.
       mem/.style={box, fill=black!6},
       arr/.style={-{Stealth[length=2mm]}, thick},
       lab/.style={font=\scriptsize\itshape, align=center}]
-    \node[box] (propose) {\textbf{Propose}\\parameters from\\JPT per action};
+    \node[box] (propose) {\textbf{Propose}\\parameters from\\flat circuits};
     \node[box, right=of propose] (execute) {\textbf{Execute}\\CRAM plan in\\MuJoCo / robot};
     \node[box, right=of execute] (segment) {\textbf{Segment}\\\segmind{} events\\over the \sdt{}};
     \node[box, right=of segment] (localise) {\textbf{Localise}\\first missing or\\unexpected event};
@@ -235,8 +238,8 @@ networks~\cite{nath2015relational}.
     \draw[arr] (memory.west) -| node[lab, below, pos=0.25] {refit (learn)} (propose.south);
     \draw[arr] (memory.east) -| node[lab, below, pos=0.25] {fit / ground} (diagnose.south);
   \end{tikzpicture}
-  \caption{The loop. A CRAM plan proposes each action's parameters from learned
-  joint probability trees and executes them. \segmind{} annotates the run with
+  \caption{The loop. A CRAM plan proposes each action's parameters from that
+  action's learned flat circuit and executes them. \segmind{} annotates the run with
   events over the semantic digital twin and scores it against \robocasa{}'s
   success predicates. On failure, the first missing or unexpected event
   localises the failed action. Flat and relational causal circuits then decide
@@ -266,11 +269,11 @@ fixture metadata, so robot, kitchen and task objects share one model.
 
 All knowledge is written in \eql{}~\cite{bassiouny2026krrood}, a query language
 embedded in Python that ranges over the twin's classes directly. \robocasa{}'s
-success checks, written as Python in each task's \texttt{\_check\_success}, are
-restated as \eql{} conditions over \segmind{}'s predicates. For example, the
+success checks are restated as \eql{} conditions over \segmind{}'s predicates.
+For example, the
 condition of \texttt{PickPlaceCounterToSink} is that the object is contained in
 the sink basin and no longer in contact with the gripper. Episodic memory stores
-every run through an object-relational mapping of the same classes: the action,
+every run through an object-relational mapping (ORM) of the same classes: the action,
 its parameters, the target, the target's neighbours and the events. A
 relational circuit can therefore be fitted on memory without flattening it into
 a table.
@@ -279,7 +282,7 @@ a table.
 \label{sec:segmind}
 
 \segmind{}~\cite{arion2026segmind} consumes a stream of twin states, either live
-during execution or replayed from a recorded episode. It emits a log of typed
+during execution or replayed from a recorded episode. It produces a log of typed
 events, each with a start and end time, the objects involved, and the \eql{}
 inference trace that produced it. Detectors are organised as event detector
 statecharts~\cite{stelter2025motionstatecharts}. A detector becomes active when
@@ -318,7 +321,7 @@ a diagnosis can never disagree about what success meant.
 
 \paragraph*{Flat circuits over action parameters}
 For each action type $a$ (pick up, place, open, close, \dots) we fit a joint
-probability tree~\cite{nyga2023jpt}, a probabilistic circuit, over the action's
+probability tree (JPT)~\cite{nyga2023jpt}, a probabilistic circuit, over the action's
 continuous parameters $X^a = (X_1, \dots, X_n)$ and the outcome variables $E$. For a pick-up, the parameters are the
 standing pose, approach direction, grasp height and arm. The outcomes are
 \segmind{}'s events, e.g.\ whether holding and lifting were detected. The
