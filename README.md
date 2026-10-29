@@ -12,7 +12,7 @@ The experiment code lives in `experiments/src/experiments/random_events_experime
 - [paper/ieeeconf.cls](paper/ieeeconf.cls), [paper/IEEEtran.bst](paper/IEEEtran.bst) — IROS style files
 - [iros_template/](iros_template/) — the unmodified IROS/PaperCept `ieeeconf` template, kept for reference
 
-IROS allows 6 pages plus up to 2 additional (paid) pages, references included. Draft notes are written with `\todo{...}` and `\note{who}{...}`; switch `\drafttrue` to `\draftfalse` in `main.tex` to hide them.
+IROS allows 6 pages plus up to 2 additional (paid) pages, references included. Draft notes are written with `\todo{...}` and `\note{who}{...}`; switch `\drafttrue` to `\draftfalse` in `main.tex` to hide them. Placeholder numbers are marked with `\dummy{...}` (tables with `\dummystyle`) and print in orange in draft mode; `grep -n 'dummy' paper/main.tex` lists every value still to be replaced.
 
 ## Building locally
 

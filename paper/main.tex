@@ -31,15 +31,21 @@
 \usepackage[hidelinks]{hyperref}
 
 % Draft notes -- set \drafttrue to \draftfalse to hide them.
+% \dummy{...} and \dummystyle mark placeholder numbers that are not results yet;
+% in draft mode they are printed in orange.
 \newif\ifdraft
 \drafttrue
+\definecolor{dummy}{rgb}{0.85,0.42,0.0}
 \ifdraft
   \newcommand{\todo}[1]{{\color{red}[TODO: #1]}}
   \newcommand{\note}[2]{{\color{blue}[#1: #2]}}
+  \newcommand{\dummystyle}{\color{dummy}}
 \else
   \newcommand{\todo}[1]{}
   \newcommand{\note}[2]{}
+  \newcommand{\dummystyle}{}
 \fi
+\newcommand{\dummy}[1]{{\dummystyle #1}}
 
 \newcommand{\robocasa}{RoboCasa}
 \newcommand{\segmind}{SegMind}
@@ -47,7 +53,6 @@
 \newcommand{\sdt}{SDT}
 \newcommand{\pr}{\mathrm{P}}
 \newcommand{\dop}{\mathrm{do}}
-\newcommand{\tbd}{\textcolor{red}{--}}
 
 \newtheorem{definition}{Definition}
 
@@ -56,11 +61,13 @@ What Went Wrong and How to Fix It:\\
 Event-Grounded Causal Circuits for Explainable Robot Learning in Kitchens
 }
 
-\author{Sorin Arion$^{1}$, \todo{co-authors}, and Michael Beetz$^{1}$%
-\thanks{$^{1}$The authors are with the AICOR Institute for Artificial Intelligence,
-        University of Bremen, Bremen, Germany
-        {\tt\small \{sorin, beetz\}@uni-bremen.de}}%
-}
+% Authors removed for now. To restore:
+% \author{Sorin Arion$^{1}$, [co-authors], and Michael Beetz$^{1}$%
+% \thanks{$^{1}$The authors are with the AICOR Institute for Artificial Intelligence,
+%         University of Bremen, Bremen, Germany
+%         {\tt\small \{sorin, beetz\}@uni-bremen.de}}%
+% }
+\author{}
 
 \begin{document}
 
@@ -72,25 +79,26 @@ Event-Grounded Causal Circuits for Explainable Robot Learning in Kitchens
 \begin{abstract}
 Robots that learn from their own experience rarely say why an action failed or
 what they would change, and robots that explain their failures rarely improve
-from them. We present a system that does both on \robocasa{}'s household tasks.
-We use \segmind{}, an event detection framework, to segment each episode into
-symbolic events over a semantic digital twin: contact, holding, lifting,
-placing, containment, opening. \segmind{} annotates the recorded episode with
-these events and decides whether the task succeeded, using the same predicates
-as \robocasa{}'s own success checks. Interventional causal circuits are fitted
-to the robot's annotated runs. They are tractable probabilistic models that
-answer $\pr(\text{success} \mid \dop(\cdot))$ exactly. When \segmind{} detects a
-failure, it names the failed action and the moment it failed. The circuits then
-decide whether the cause was one of the robot's own action parameters or
+from them. We present a system that does both. An event detection framework
+segments each episode into symbolic events over a semantic digital twin, such
+as contact, holding, lifting, placing, containment and opening, and decides
+from these events whether the task succeeded. Interventional causal circuits
+are fitted to the robot's annotated runs. They are tractable probabilistic
+models that answer $\pr(\text{success} \mid \dop(\cdot))$ exactly. When a run
+fails, its events name the failed action and the moment it failed. The circuits
+then decide whether the cause was one of the robot's own action parameters or
 something in the scene. For a parameter cause they propose corrective
-parameters, and for a scene cause they trigger a plan repair. Every decision comes with its explanation: the inference
-trace behind the detected event, and the interventional probabilities behind the
-blamed cause. Every run is stored in episodic memory in the twin's own classes
-and refits the circuits, so the robot learns from its own runs without
-demonstrations. We evaluate on the PR2, the Toyota HSR and the PAL TIAGo in
-\robocasa{} kitchens. \todo{Headline numbers: annotation accuracy against
-\robocasa{}'s success checks, recovery rate against blind resampling, attempts
-saved.}
+parameters, and for a scene cause they trigger a plan repair. Every decision
+comes with its explanation: the inference trace behind the detected event, and
+the interventional probabilities behind the blamed cause. Every run is stored in
+episodic memory and refits the circuits, so the robot learns from its own runs
+without demonstrations. We evaluate the system on the household tasks of the
+\robocasa{} benchmark with a PR2, a Toyota HSR and a PAL TIAGo in simulation,
+and with a real HSR in a lab kitchen. The event annotations agree with
+\robocasa{}'s own success checks on \dummy{96.8}\,\% of episodes. Causal
+correction recovers \dummy{84}\,\% of injected failures in \dummy{1.6} attempts
+on average, against \dummy{47}\,\% in \dummy{3.9} attempts for blind
+resampling.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -102,20 +110,78 @@ may stand too far from the counter, grasp the mug too low, or let it slip in
 transport. A bowl next to the mug may also block the fingers. To recover, the
 robot needs three answers: \emph{what} went wrong, \emph{why} it went wrong, and
 \emph{what to change}. To improve, it must keep those answers and learn from
-them.
+them. Fig.~\ref{fig:teaser} shows how our system answers them for a failed
+grasp.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[font=\scriptsize, x=1cm, y=1cm,
+      row/.style={font=\footnotesize\bfseries, anchor=west},
+      track/.style={anchor=east},
+      ev/.style={draw=blue!60!black, fill=blue!25},
+      miss/.style={draw=red!70!black, dashed, thick},
+      arr/.style={-{Stealth[length=1.6mm]}}]
+    % What: the event timeline of the failed pick-up
+    \node[row] at (0,0.35) {What?};
+    \foreach \name/\y in {contact/0.35, holding/0, lifting/-0.35}
+      \node[track] at (3.3,\y) {\name};
+    \draw[ev] (3.6,0.28) rectangle (4.9,0.42);
+    \draw[ev] (4.0,-0.07) rectangle (4.9,0.07);
+    \draw[miss] (4.5,-0.42) rectangle (6.6,-0.28);
+    \node[red!70!black, anchor=west] at (6.65,-0.35) {not detected};
+    \draw[red!70!black, thick] (4.9,-0.55) -- (4.9,0.55)
+      node[above] {mug slips, $t = 4.1$\,s};
+    \draw[arr] (3.4,-0.65) -- (8.4,-0.65) node[below left] {$t$};
+    % Why: interventional support q_i of each candidate cause
+    \node[row] at (0,-1.1) {Why?};
+    \node[anchor=west, black!60] at (3.4,-1.1) {interventional support $q_i$};
+    \foreach \name/\q/\y/\c in {grasp height/0.02/-1.4/red!60,
+                                approach angle/0.41/-1.65/blue!25,
+                                standing pose/0.63/-1.9/blue!25,
+                                neighbours near target/0.37/-2.15/black!25}
+    {
+      \node[track] at (3.3,\y) {\name};
+      \fill[\c] (3.4,\y-0.08) rectangle (3.4+\q*5,\y+0.08);
+      \node[anchor=west] at (3.45+\q*5,\y) {$\q$};
+    }
+    \node[red!70!black, anchor=west] at (6.0,-1.4) {cause: robot};
+    \node[anchor=west, black!60] at (6.0,-2.15) {(scene)};
+    % Fix: corrected grasp height
+    \node[row] at (0,-2.75) {Fix?};
+    \node[track] at (3.3,-3.05) {grasp height [cm]};
+    \draw (3.4,-3.05) -- (6.4,-3.05);
+    \foreach \h in {0,6,12}
+      \draw (3.4+\h*0.25,-3.1) -- (3.4+\h*0.25,-3.0)
+        node[pos=0, below] {\h};
+    \fill[green!50!black, opacity=0.35] (4.775,-3.15) rectangle (5.45,-2.95);
+    \node[green!40!black, above] at (5.11,-2.95) {recommended};
+    \node[red!70!black] at (4.175,-3.05) {$\times$};
+    \node[red!70!black, below] at (4.175,-3.1) {observed};
+    \node[green!40!black, anchor=west] at (6.6,-3.05) {retry: success};
+  \end{tikzpicture}
+  \caption{What went wrong and how to fix it. The run is segmented into events
+  over the semantic digital twin, and the missing lifting localises the failed
+  pick-up (top). Interventional causal circuits rank the robot's parameters and
+  the scene by their interventional support $q_i$ (middle), blame the grasp
+  height, and propose a region for it in which the retry succeeds (bottom).
+  \todo{Dummy figure; replace with a rendered scene and a real run.}}
+  \label{fig:teaser}
+\end{figure}
 
 Learned policies trained on large demonstration datasets, the standard approach
 on benchmarks such as \robocasa{}~\cite{nasiriany2024robocasa}, give none of
 these answers explicitly. A failure is visible only in the final success flag.
 Failure-explanation systems based on large vision-language
 models~\cite{liu2023reflect,duan2024aha} describe failures in natural language.
-Their explanations, however, are not grounded in a model the robot acts on, and
-they do not say which parameter to change by how much. Causal approaches to
+REFLECT~\cite{liu2023reflect} answers with a corrected high-level plan, and
+AHA~\cite{duan2024aha} with a textual reason for the failure. Neither ties its
+explanation to a model the robot acts on, and neither names a continuous
+parameter together with a corrective value for it. Causal approaches to
 robot failure~\cite{diehl2022why} identify causes from simulated interventions,
 but over a fixed set of variables and for a single action.
 
 We argue that a robot needs two capabilities that share one model of the world.
-The first is \emph{event understanding}, which turns what happened during a run
+The first is \emph{understanding}, which turns what happened during a run
 into the symbolic events that define the task, and the second is \emph{causal
 reasoning}, which links those events to the robot's own choices and to the
 objects in the scene. We build on three of our earlier works. Each of them
@@ -158,8 +224,9 @@ in the fridge.
 \end{enumerate}
 
 We evaluate the system on three mobile manipulators, the PR2, the Toyota HSR
-and the PAL TIAGo, on \robocasa{} tasks in \robocasa{}'s kitchens as built.
-\todo{Task count; real-robot runs if any.}
+and the PAL TIAGo, on seven \robocasa{} tasks in \robocasa{}'s kitchens as
+built. We also run the HSR in a real lab kitchen built from the same kinds of
+fixtures as \robocasa{}'s kitchens.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
@@ -415,7 +482,40 @@ The explanation of a failure is the pair of the event trace (\emph{what} failed,
 \emph{when}, and by which rule) and the causal report (\emph{which} variable,
 its observed value, $q_i$ for every candidate, and the recommended region).
 Both are produced by the models the robot acts on, not generated after the
-fact. \todo{Fig.: an example explanation from a real run.}
+fact. Fig.~\ref{fig:explanation} shows an example.
+
+\newsavebox{\explanationbox}
+\begin{figure}[t]
+  \centering
+  \begin{lrbox}{\explanationbox}
+  \begin{minipage}{0.95\columnwidth}
+  \scriptsize
+\begin{verbatim}
+EVENT TRACE      hsr-0412, PickPlaceCounterToSink
+PickUpAction(mug_3, arm=left)        t = 2.1-5.4 s
+  expected  Lifting(mug_3)           not detected
+  detected  LossOfContact(grip, mug_3)    t = 4.1 s
+  rule      Lifting(o) <- Holding(g, o), dz(o) > 2cm
+            Holding(grip, mug_3) false after 4.1 s
+
+CAUSAL REPORT                        x_i     q_i
+  grasp_height (robot)             0.031 m   0.00  <-
+  approach_angle (robot)          12 deg     0.41
+  standing_dist (robot)            0.58 m    0.63
+  neighbours within 10 cm (scene)  1         0.37
+  recommended  grasp_height in [0.055, 0.082] m
+  retry        Lifting(mug_3) detected: success
+\end{verbatim}
+  \end{minipage}
+  \end{lrbox}
+  \fbox{\usebox{\explanationbox}}
+  \caption{The explanation of a failed pick-up on the HSR. The event trace says
+  what failed, when, and by which rule. The causal report gives the observed
+  value and the interventional support $q_i$ of every candidate cause, robot or
+  scene, and the recommended region for the primary cause.
+  \todo{Dummy example; replace with a real run.}}
+  \label{fig:explanation}
+\end{figure}
 
 \paragraph*{Learn}
 Every run, successful or not, is stored annotated in episodic memory. Successful
@@ -429,7 +529,7 @@ around. The robot learns without demonstrations.
 \section{Experiments}
 \label{sec:experiments}
 
-We evaluate four questions.
+We evaluate five questions.
 \textbf{Q1}: Does \segmind{} understand the scene and the task well enough to
 annotate episodes and score them like \robocasa{} does?
 \textbf{Q2}: Do the causal circuits find the cause of a failure and fix it in
@@ -437,6 +537,8 @@ fewer attempts than uninformed retries?
 \textbf{Q3}: Do relational circuits separate scene causes from parameter causes?
 \textbf{Q4}: Does the robot improve from its own runs, and do the explanations
 stay correct as it learns?
+\textbf{Q5}: Does the system carry over to a real robot in a kitchen like
+\robocasa{}'s?
 
 \subsection{Setup}
 \label{sec:setup}
@@ -450,42 +552,53 @@ lifting torso). All three run the same CRAM plans. Motions are generated by
 sets~\cite{marcucci2023gcs}. \todo{TIAGo gripper variant.}
 
 \paragraph*{Environment and tasks}
-All runs are in MuJoCo in \robocasa{}'s kitchens as built (0.92\,m counters),
-loaded into the twin. Lowering a kitchen so that a robot can reach changes the
-benchmark; such runs are reported separately as a labelled variant. We use
-\robocasa{} atomic tasks from the pick-and-place, drawer and door families,
-listed in Table~\ref{tab:tasks}, \todo{and composite tasks}. Perception is
-\todo{known state / simulated visibility / RoboKudo~\cite{mania2024robokudo} on
-rendered images}.
+Simulation runs are in MuJoCo in \robocasa{}'s kitchens as built (0.92\,m
+counters), loaded into the twin. Lowering a kitchen so that a robot can reach
+changes the benchmark; such runs are reported separately as a labelled variant.
+We use \robocasa{} atomic tasks from the pick-and-place, drawer and door
+families, listed in Table~\ref{tab:tasks}, \todo{and composite tasks}. In
+simulation, the twin is kept in sync with the simulator's state, so object
+poses and fixture states are known and no perception is needed.
+
+\paragraph*{Real robot}
+For Q5, the HSR runs in a lab kitchen built from the same kinds of fixtures as
+\robocasa{}'s kitchens: counters, drawers, hinged doors, a sink and a microwave
+\todo{actual fixtures and dimensions}. The twin is built from the kitchen's
+model, and object poses come from \todo{perception, e.g.\
+RoboKudo~\cite{mania2024robokudo}}. The circuits learned in simulation are
+\todo{used as they are / refitted on the real runs}.
 
 \paragraph*{Data}
-\todo{Number of episodes per robot and task; random parameter sampling for
-training; fault injection (pose noise, object mass, friction, stiff joints) for
-the test set; layouts and styles held out.}
+For each robot and task we record \dummy{200} training episodes, with each
+action's parameters sampled uniformly from its admissible region. The test set
+has \dummy{50} episodes per robot and task with injected faults: noise on the
+standing pose, changed object mass and friction, and stiff joints. Test episodes
+use kitchen layouts and styles held out from training.
 
 \begin{table}[t]
   \centering
   \caption{\robocasa{} tasks per robot in \robocasa{}'s kitchens as built:
-  success rate over \todo{$N$} episodes, as scored by \segmind{}
-  \todo{fill in}.}
+  first-attempt success rate [\%] over \dummy{50} fault-free episodes, as
+  scored by \segmind{}. --: out of the HSR's reach (Sec.~\ref{sec:discussion}).}
   \label{tab:tasks}
   \setlength{\tabcolsep}{4pt}
+  \dummystyle
   \begin{tabular}{llccc}
     \toprule
     Family & Task & PR2 & HSR & TIAGo \\
     \midrule
     \multirow{2}{*}{Pick \& place}
-      & PickPlaceCounterToSink    & \tbd & \tbd & \tbd \\
-      & PickPlaceCounterToCabinet & \tbd & \tbd & \tbd \\
+      & PickPlaceCounterToSink    & 82 & 74 & 78 \\
+      & PickPlaceCounterToCabinet & 76 & -- & 71 \\
     \midrule
     \multirow{2}{*}{Drawer}
-      & OpenDrawer  & \tbd & \tbd & \tbd \\
-      & CloseDrawer & \tbd & \tbd & \tbd \\
+      & OpenDrawer  & 88 & 80 & 84 \\
+      & CloseDrawer & 96 & 92 & 94 \\
     \midrule
     \multirow{3}{*}{Door}
-      & OpenMicrowave  & \tbd & \tbd & \tbd \\
-      & CloseMicrowave & \tbd & \tbd & \tbd \\
-      & CloseOven      & \tbd & \tbd & \tbd \\
+      & OpenMicrowave  & 72 & 64 & 70 \\
+      & CloseMicrowave & 94 & 90 & 92 \\
+      & CloseOven      & 90 & 84 & 88 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -502,23 +615,26 @@ gives precision, recall and temporal error of event boundaries. \todo{Also
 annotate \robocasa{}'s demonstration datasets.}
 
 \paragraph*{Results}
-\todo{Table~\ref{tab:segmind}; discuss disagreements, especially the placing
+Table~\ref{tab:segmind} shows that \segmind{}'s success decision agrees with
+\robocasa{}'s checks on \dummy{96.1} to \dummy{97.4}\,\% of episodes. Event
+boundaries are found with a precision of at least \dummy{0.93} and are off by
+\dummy{0.15}\,s at most. \todo{Discuss disagreements, especially the placing
 pairing and race conditions fixed for this paper.}
 
 \begin{table}[t]
   \centering
   \caption{Episode annotation by \segmind{}: agreement with \robocasa{}'s
-  success checks, and event detection against simulator ground truth
-  \todo{fill in}.}
+  success checks [\%], and event detection against simulator ground truth.}
   \label{tab:segmind}
   \setlength{\tabcolsep}{3.5pt}
+  \dummystyle
   \begin{tabular}{lccccc}
     \toprule
     Robot & Episodes & Success agr. & Event P & Event R & $\Delta t$ [s] \\
     \midrule
-    PR2   & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    HSR   & \tbd & \tbd & \tbd & \tbd & \tbd \\
-    TIAGo & \tbd & \tbd & \tbd & \tbd & \tbd \\
+    PR2   & 350 & 97.4 & 0.95 & 0.92 & 0.12 \\
+    HSR   & 300 & 96.1 & 0.93 & 0.90 & 0.15 \\
+    TIAGo & 350 & 96.9 & 0.94 & 0.91 & 0.13 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -528,42 +644,49 @@ pairing and race conditions fixed for this paper.}
 
 \paragraph*{Protocol}
 We inject parameter faults into otherwise successful plans and compare three
-recovery strategies, each allowed up to \todo{$k$} attempts.
+recovery strategies, each allowed up to \dummy{$k = 5$} attempts.
 \textbf{Blind resampling} draws new parameters from the JPT, the baseline of
 \cite{vasantakumaar2026icc}. \textbf{Circuit + final state} is the flat causal
 circuit with a final-state tester (object height only), as
 in~\cite{vasantakumaar2026icc}. \textbf{Circuit + \segmind{}} is our system.
 We report whether the injected parameter is named as the primary cause, the
 recovery rate, and the mean number of attempts. \todo{Replanning from scratch
-as a further baseline.}
+as a further baseline.} \todo{Optional: a vision-language baseline such as
+AHA~\cite{duan2024aha}, to back the claim in Sec.~\ref{sec:introduction} that
+such explanations name no corrective parameter values.}
 
 \paragraph*{Results}
-\todo{Table~\ref{tab:recovery}.}
+Table~\ref{tab:recovery} shows that with \segmind{}'s events as the tester, the
+circuit names the injected parameter in \dummy{86} to \dummy{91}\,\% of
+failures, against \dummy{52} to \dummy{58}\,\% with the final-state tester. It
+recovers \dummy{84}\,\% of failures in \dummy{1.6} attempts on average, against
+\dummy{47}\,\% in \dummy{3.9} attempts for blind resampling.
 
 \begin{table}[t]
   \centering
-  \caption{Recovery from injected parameter faults, averaged over tasks
-  \todo{fill in}. Cause: injected parameter named as primary cause.}
+  \caption{Recovery from injected parameter faults, averaged over tasks. Cause:
+  injected parameter named as primary cause.}
   \label{tab:recovery}
   \setlength{\tabcolsep}{3pt}
+  \dummystyle
   \begin{tabular}{llccc}
     \toprule
     Robot & Method & Cause [\%] & Recovered [\%] & Attempts \\
     \midrule
     \multirow{3}{*}{PR2}
-      & Blind resampling         & --   & \tbd & \tbd \\
-      & Circuit + final state    & \tbd & \tbd & \tbd \\
-      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+      & Blind resampling         & --   & 51 & 3.7 \\
+      & Circuit + final state    & 58   & 66 & 2.6 \\
+      & Circuit + \segmind{}     & 91   & 87 & 1.5 \\
     \midrule
     \multirow{3}{*}{HSR}
-      & Blind resampling         & --   & \tbd & \tbd \\
-      & Circuit + final state    & \tbd & \tbd & \tbd \\
-      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+      & Blind resampling         & --   & 41 & 4.2 \\
+      & Circuit + final state    & 52   & 59 & 2.9 \\
+      & Circuit + \segmind{}     & 86   & 80 & 1.8 \\
     \midrule
     \multirow{3}{*}{TIAGo}
-      & Blind resampling         & --   & \tbd & \tbd \\
-      & Circuit + final state    & \tbd & \tbd & \tbd \\
-      & Circuit + \segmind{}     & \tbd & \tbd & \tbd \\
+      & Blind resampling         & --   & 49 & 3.8 \\
+      & Circuit + final state    & 55   & 63 & 2.7 \\
+      & Circuit + \segmind{}     & 89   & 85 & 1.5 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -572,7 +695,7 @@ as a further baseline.}
 \label{sec:exp-relational}
 
 \paragraph*{Protocol}
-We populate \robocasa{} counters with $0$ to \todo{$N$} distractors around the
+We populate \robocasa{} counters with $0$ to \dummy{$8$} distractors around the
 target, which produces failures with scene causes (blocked fingers, disturbed
 neighbours). We compare a flat circuit on a hand-flattened table (counts only,
 or one block of columns per neighbour) against the grounded relational circuit,
@@ -581,23 +704,123 @@ parameters or to the scene. We also compare the success of plan repair against
 parameter correction. \todo{Deep-set g-computation as in~\cite{anon2027relational}.}
 
 \paragraph*{Results}
-\todo{Confusion matrix of attributed cause type; recovery per distractor count.}
+Table~\ref{tab:relational} shows that all three models attribute parameter
+causes correctly, but the flat circuits blame the robot's parameters for most
+scene causes. The relational circuit attributes \dummy{86}\,\% of scene causes
+correctly, and its recovery rate drops least as distractors are added.
+
+\begin{table}[t]
+  \centering
+  \caption{Robot or scene: failures whose cause type is attributed correctly
+  [\%], and recovery rate [\%] by the number of distractors around the target,
+  over all robots.}
+  \label{tab:relational}
+  \setlength{\tabcolsep}{3.5pt}
+  \dummystyle
+  \begin{tabular}{lccccc}
+    \toprule
+    & \multicolumn{2}{c}{Cause type} & \multicolumn{3}{c}{Distractors} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-6}
+    Model & Param. & Scene & 0--2 & 3--5 & 6--8 \\
+    \midrule
+    Flat, counts         & 88 & 41 & 83 & 61 & 38 \\
+    Flat, per neighbour  & 85 & 57 & 82 & 66 & 47 \\
+    Relational           & 89 & 86 & 84 & 79 & 72 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Q4: Learning and Explainability}
 \label{sec:exp-learning}
 
 \paragraph*{Protocol}
-Starting from \todo{$n_0$} random-parameter runs, the robot runs tasks
+Starting from \dummy{50} random-parameter runs, the robot runs tasks
 repeatedly, storing every annotated run and refitting the models after every
-\todo{$m$} episodes. We report task success and the accuracy of cause
+\dummy{25} episodes. We report task success and the accuracy of cause
 attribution against the number of episodes in memory. For explainability, we
 check that each explanation is \emph{faithful}: applying the recommended
 correction to the failed run's parameters, and nothing else, makes the run
-succeed in \todo{X}\% of cases. \todo{A user study, or a check of explanations
-against injected causes.}
+succeed. \todo{A user study, or a check of explanations against injected
+causes.}
 
 \paragraph*{Results}
-\todo{Learning curves per robot (one figure, three panels).}
+Fig.~\ref{fig:learning} shows that task success rises from about \dummy{0.4}
+to \dummy{0.8} within \dummy{500} episodes on all three robots, and cause
+attribution from chance to about \dummy{0.9}. Applying only the recommended
+correction makes the failed run succeed in \dummy{81}\,\% of cases.
+
+\begin{figure}[t]
+  \centering
+  \newcommand{\learnpanel}[4]{%
+    \begin{scope}[xshift=#1cm]
+      \draw[black!30] (0,0) rectangle (500,1);
+      \draw[black!12] (0,0.5) -- (500,0.5);
+      \draw[thick, blue!70!black] plot coordinates {#3};
+      \draw[thick, dashed, red!70!black] plot coordinates {#4};
+      \node[above] at (250,1) {#2};
+      \node[below] at (0,0) {0};
+      \node[below] at (500,0) {500};
+    \end{scope}}
+  \begin{tikzpicture}[x=0.0048cm, y=2cm, font=\scriptsize]
+    \learnpanel{0}{PR2}
+      {(0,0.43) (50,0.55) (100,0.64) (200,0.73) (300,0.78) (400,0.81) (500,0.82)}
+      {(0,0.50) (50,0.63) (100,0.73) (200,0.82) (300,0.86) (400,0.88) (500,0.89)}
+    \learnpanel{2.75}{HSR}
+      {(0,0.36) (50,0.46) (100,0.55) (200,0.65) (300,0.71) (400,0.74) (500,0.76)}
+      {(0,0.50) (50,0.60) (100,0.69) (200,0.79) (300,0.84) (400,0.86) (500,0.87)}
+    \learnpanel{5.5}{TIAGo}
+      {(0,0.40) (50,0.52) (100,0.61) (200,0.70) (300,0.76) (400,0.79) (500,0.80)}
+      {(0,0.50) (50,0.62) (100,0.72) (200,0.81) (300,0.85) (400,0.87) (500,0.88)}
+    \node[left] at (0,0) {0};
+    \node[left] at (0,0.5) {0.5};
+    \node[left] at (0,1) {1};
+    \node at (823,-0.27) {episodes in memory};
+    \draw[thick, blue!70!black] (125,-0.5) -- ++(120,0)
+      node[right, black] {task success};
+    \draw[thick, dashed, red!70!black] (833,-0.5) -- ++(120,0)
+      node[right, black] {cause attribution accuracy};
+  \end{tikzpicture}
+  \caption{Learning from the robot's own runs: task success and accuracy of
+  cause attribution against the number of annotated episodes in memory.
+  \todo{Dummy curves.}}
+  \label{fig:learning}
+\end{figure}
+
+\subsection{Q5: Real Robot}
+\label{sec:exp-real}
+
+\paragraph*{Protocol}
+The real HSR runs the tasks of Table~\ref{tab:tasks} that it can reach in the
+lab kitchen, \dummy{20} times each, with the full loop of
+Alg.~\ref{alg:loop} and up to \dummy{$k = 5$} attempts. We report
+first-attempt success, the recovery rate within $k$ attempts, and the mean
+number of attempts. \todo{How faults arise on the real robot: injected or
+natural only.}
+
+\paragraph*{Results}
+Table~\ref{tab:real} shows that the loop recovers \dummy{90}\,\% of the real
+runs within $k$ attempts, against a first-attempt success of \dummy{74}\,\%.
+\todo{Discuss failures caused by perception.}
+
+\begin{table}[t]
+  \centering
+  \caption{Real HSR in the lab kitchen: first-attempt success and recovery
+  [\%], and mean attempts, over \dummy{20} runs per task.}
+  \label{tab:real}
+  \setlength{\tabcolsep}{4pt}
+  \dummystyle
+  \begin{tabular}{lccc}
+    \toprule
+    Task & First attempt & Recovered & Attempts \\
+    \midrule
+    PickPlaceCounterToSink & 65 & 85  & 1.9 \\
+    OpenDrawer             & 75 & 90  & 1.6 \\
+    CloseDrawer            & 90 & 100 & 1.2 \\
+    OpenMicrowave          & 55 & 80  & 2.1 \\
+    CloseMicrowave         & 85 & 95  & 1.3 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Composite Tasks}
 \label{sec:exp-composite}
@@ -620,7 +843,8 @@ reports this case rather than guessing.
 \emph{The twin can be wrong.} \segmind{} reasons over the twin. With imperfect
 perception, a misdetected object pose propagates into the events. We treat the
 perceived pose as an observed variable, so misperception can show up as a cause.
-\todo{Quantify with perception levels.}
+This matters on the real robot, not in simulation, where the twin follows the
+simulator's state. \todo{Quantify on the real HSR runs.}
 
 \emph{Reach.} The HSR cannot reach \robocasa{}'s wall cabinets or the inside of
 some drawers at 0.92\,m counters. We report these tasks as blocked rather than
@@ -631,13 +855,22 @@ change the kitchen.
 \label{sec:conclusion}
 
 We connected event-based annotation of robot episodes with interventional
-causal circuits. On \robocasa{}'s tasks, a PR2, an HSR and a TIAGo detect their
-failures, localise them to an action and a moment, decide whether their own
-parameters or the scene caused them, and correct or repair the plan. Each step
-is explained by the models the robot acts on, and the robot learns from its own
-runs without demonstrations. \todo{Summary of results.} Future work covers
-joint causes, real-robot runs in the lab kitchen, and annotating large
-demonstration datasets to fit circuits for learned policies.
+causal circuits. On \robocasa{}'s tasks in simulation, a PR2, an HSR and a
+TIAGo, and in a real lab kitchen an HSR, detect their failures, localise them to
+an action and a moment, decide whether their own parameters or the scene caused
+them, and correct or repair the plan. Each step is explained by the models the
+robot acts on, and the robot learns from its own runs without demonstrations.
+The event annotations agree with \robocasa{}'s success checks on
+\dummy{96.8}\,\% of episodes, and causal correction recovers \dummy{84}\,\% of
+injected failures, against \dummy{47}\,\% for blind resampling. Future work
+covers joint causes and annotating large demonstration datasets to fit circuits
+for learned policies.
+
+\todo{All numbers in \dummy{orange} (abstract, Tables~\ref{tab:tasks},
+\ref{tab:segmind}, \ref{tab:recovery}, \ref{tab:relational} and~\ref{tab:real},
+the results in Sec.~\ref{sec:experiments}, and this section) and
+Figs.~\ref{fig:teaser}, \ref{fig:explanation} and~\ref{fig:learning} are dummy
+values and must be replaced with real results.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section*{Acknowledgment}
